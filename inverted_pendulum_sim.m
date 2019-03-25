@@ -8,13 +8,14 @@ close all
 
 % Simulation parameters
 dt = 0.01; % Seconds
-sim_time = 1; % Seconds
-pitch_desired = -pi/6; % Radians
+sim_time = 10; % Seconds
+B_desired = 1; % Meters
+% pitch_desired = 0; % Radians
 
 % Initialize simulated physical system
 r_wheel = 0;
 l_wheel = 0;
-pitch = -pi/3; % Radians
+pitch = pi/6; % Radians
 w = 0; % Rad/s
 w_dot = 0; % Rad/s^2
 yaw = 0;
@@ -26,7 +27,7 @@ bot_depth = 0.02;
 wheel_radius = 0.01;
 W = 0; % Midpoint between wheels position, meters
 v_W = 0; % Wheel velocity, m/s
-bot_mass = 0.1; % In kg
+bot_mass = 1; % In kg
 
 g = -9.80665; % In m/s^2
 
@@ -36,12 +37,35 @@ r = bot_height/2 - wheel_radius;
 num_steps = sim_time/dt;
 t = 0:dt:(sim_time-dt);
 
-% Feedback controller
-Kp = 100;
-Ki = 20;
-Kd = 5;
-last_err = pitch - pitch_desired;
-integrator = 0;
+% High level feedback controller
+K_pos = 0.15;
+Kp_pos = 1*K_pos;
+Ki_pos = 0*K_pos;
+Kd_pos = 1*K_pos;
+max_pos_err = 0.5;
+
+B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
+last_pos_err = B(1) - B_desired;
+
+pos_integrator = 0;
+
+% Run high level controller for the first step
+pos_err = B(1) - B_desired;
+
+pos_integrator = pos_integrator + Ki_pos*pos_err*dt;
+c_pos = Kp_pos*pos_err + Kd_pos*(pos_err - last_pos_err)/dt + pos_integrator;
+last_pos_err = pos_err;
+
+pitch_desired = c_pos;
+
+% Low level feedback controller
+K_pitch = 50;
+Kp_pitch = 1*K_pitch;
+Ki_pitch = 0.02*K_pitch;
+Kd_pitch = 0.05*K_pitch;
+
+last_pitch_err = pitch - pitch_desired;
+pitch_integrator = 0;
 
 % History for graphing
 pitch_hist = zeros(1, num_steps);
@@ -55,14 +79,24 @@ axis equal
 hold on
 grid on
 
+pause
+
 for i = 1:num_steps
-    % Controller
-    err = pitch - pitch_desired;
-    integrator = integrator + Ki*err*dt;
-    c = Kp*err + Kd*(err - last_err)/dt + integrator;
-    last_err = err;
+    % High level controller
+    pos_err = B(1) - B_desired;
+    pos_integrator = pos_integrator + Ki_pos*pos_err*dt;
+    c_pos = Kp_pos*pos_err + Kd_pos*(pos_err - last_pos_err)/dt + pos_integrator;
+    last_pos_err = pos_err;
     
-    v_W_dot = -c;
+    pitch_desired = c_pos;
+    
+    % Low level controller
+    pitch_err = pitch - pitch_desired;
+    pitch_integrator = pitch_integrator + Ki_pitch*pitch_err*dt;
+    c_pitch = Kp_pitch*pitch_err + Kd_pitch*(pitch_err - last_pitch_err)/dt + pitch_integrator;
+    last_pitch_err = pitch_err;
+    
+    v_W_dot = -c_pitch;
     
     % Find pitch
     w_dot = v_W_dot*cos(pitch)/r - g*sin(pitch)/r;
@@ -86,7 +120,7 @@ for i = 1:num_steps
     hold on
     grid on
     draw_rectangle_rotated(B, bot_depth, bot_height, pitch, 'red')
-    % plot(B(1), B(2), '*')
+    plot(B(1), B(2), '*')
     pause(0.001)
 end
 
