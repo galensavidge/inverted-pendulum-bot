@@ -12,6 +12,10 @@ sim_time = 10; % Seconds
 B_desired = 1; % Meters
 % pitch_desired = 0; % Radians
 
+% Graphing parameters
+body_color = [0.1 0.1 0.8];
+wheel_color = [0.8 0.1 0.1];
+
 % Initialize simulated physical system
 r_wheel = 0;
 l_wheel = 0;
@@ -24,7 +28,7 @@ w_yaw_dot = 0;
 bot_height = 0.15; % Meters
 bot_width = 0.05;
 bot_depth = 0.02;
-wheel_radius = 0.01;
+wheel_radius = 0.02;
 W = 0; % Midpoint between wheels position, meters
 v_W = 0; % Wheel velocity, m/s
 bot_mass = 1; % In kg
@@ -32,7 +36,7 @@ bot_mass = 1; % In kg
 g = -9.80665; % In m/s^2
 
 % Distance from center of wheel to center of rotation
-r = bot_height/2 - wheel_radius;
+r = bot_height/2;
 
 num_steps = sim_time/dt;
 t = 0:dt:(sim_time-dt);
@@ -119,8 +123,11 @@ for i = 1:num_steps
     axis equal
     hold on
     grid on
-    draw_rectangle_rotated(B, bot_depth, bot_height, pitch, 'red')
-    plot(B(1), B(2), '*')
+    draw_rectangle_rotated(B, bot_depth, bot_height, pitch, body_color)
+    plot(B(1), B(2), 'w*')
+    rectangle('Position',[W(1) - wheel_radius, 0 , 2*wheel_radius, 2*wheel_radius],...
+    'Curvature',[1,1], 'FaceColor',wheel_color);
+    
     pause(0.001)
 end
 
