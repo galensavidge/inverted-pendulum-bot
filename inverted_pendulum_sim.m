@@ -43,9 +43,9 @@ num_steps = sim_time/dt;
 t = 0:dt:(sim_time-dt);
 
 % High level feedback controller
-K_pos = 0.15;
+K_pos = 0.2;
 Kp_pos = 1*K_pos;
-Kd_pos = 1*K_pos;
+Kd_pos = 1.3*K_pos;
 
 % Run high level controller for the first step
 B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
@@ -58,7 +58,7 @@ last_pos_err = pos_err;
 pitch_desired = c_pos;
 
 % Low level feedback controller
-K_pitch = 50;
+K_pitch = 25;
 Kp_pitch = 1*K_pitch;
 Ki_pitch = 0.02*K_pitch;
 Kd_pitch = 0.05*K_pitch;
