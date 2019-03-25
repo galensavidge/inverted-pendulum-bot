@@ -82,8 +82,9 @@ axis([-0.25 0.25 -0.25 0.25])
 axis equal
 hold on
 grid on
-
-pause
+xlabel('X_I (Meters)')
+ylabel('Y_I (Meters)')
+title('Inverted Pendulum Bot Simulation')
 
 for i = 1:num_steps
     % High level controller
@@ -118,16 +119,12 @@ for i = 1:num_steps
     B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
     
     figure(1)
-    clf
-    axis([-0.25 0.25 -0.25 0.25])
-    axis equal
-    hold on
-    grid on
+    cla
     draw_rectangle_rotated(B, bot_depth, bot_height, pitch, body_color)
     plot(B(1), B(2), 'w*')
     rectangle('Position',[W(1) - wheel_radius, 0 , 2*wheel_radius, 2*wheel_radius],...
     'Curvature',[1,1], 'FaceColor',wheel_color);
-    
+    plot([B(1)-1 B(1)+1], [0, 0], 'k')
     pause(0.001)
 end
 
