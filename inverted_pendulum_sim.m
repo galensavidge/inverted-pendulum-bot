@@ -9,47 +9,44 @@ close all
 % Simulation parameters
 dt = 0.01; % Seconds
 sim_time = 10; % Seconds
-B_desired = 5; % Meters
-% pitch_desired = 0; % Radians
-max_speed = 1; % m/s
+B_desired = 0.5; % Desired position of center of mass, meters
+max_speed = 1; % Bot top speed, m/s
 
 % Graphing parameters
 body_color = [0.1 0.1 0.8];
 wheel_color = [0.8 0.1 0.1];
 
+% Bot physical attributes
+bot_mass = 1; % In kg
+bot_height = 0.15; % 15 cm, ~6 in
+bot_width = 0.075; % 7.5 cm, ~3 in
+bot_depth = 0.025; % 2.5 cm, ~1 in
+wheel_radius = 0.038; % 1.5 in
+wheel_max_w = 300*2*pi/60; % Rad/s
+r = bot_height/2; % Center of wheel to center of mass
+
 % Initialize simulated physical system
-r_wheel = 0;
-l_wheel = 0;
+v_r = 0; % Right wheel speed, m/s
+v_l = 0; % Left wheel speed, m/s
 pitch = 0; % Radians
 w = 0; % Rad/s
 w_dot = 0; % Rad/s^2
 yaw = 0;
 w_yaw = 0;
-w_yaw_dot = 0;
-bot_height = 0.15; % Meters
-bot_width = 0.05;
-bot_depth = 0.02;
-wheel_radius = 0.02;
-W = 0; % Midpoint between wheels position, meters
+W = 0; % Distance traveled by wheels, meters
 v_W = 0; % Wheel velocity, m/s
-bot_mass = 1; % In kg
+v_W_max = wheel_max_w*wheel_radius; % m/s
 
+% Constants
 g = -9.80665; % In m/s^2
 
-% Distance from center of wheel to center of rotation
-r = bot_height/2;
-
-num_steps = sim_time/dt;
-t = 0:dt:(sim_time-dt);
-
-% High level feedback controller
+% Position controller (modified PD)
 K_pos = 0.2;
-Kp_pos = 1*K_pos;
-Kd_pos = 1.3*K_pos;
+Kp_pos = 1.5*K_pos;
+Kd_pos = 1*K_pos;
 
 % Run high level controller for the first step
 B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
-
 pos_err = B(1) - B_desired;
 pos_err_p = sign(pos_err)*min(abs(pos_err), max_speed*Kd_pos/Kp_pos);
 c_pos = Kp_pos*pos_err_p;
@@ -57,7 +54,7 @@ last_pos_err = pos_err;
 
 pitch_desired = c_pos;
 
-% Low level feedback controller
+% Pitcch controller (standard PID)
 K_pitch = 25;
 Kp_pitch = 1*K_pitch;
 Ki_pitch = 0.02*K_pitch;
@@ -67,6 +64,8 @@ last_pitch_err = pitch - pitch_desired;
 pitch_integrator = 0;
 
 % History for graphing
+num_steps = sim_time/dt;
+t = 0:dt:(sim_time-dt);
 pitch_hist = zeros(1, num_steps);
 v_W_hist = zeros(1, num_steps);
 w_W_hist = zeros(1, num_steps);
@@ -80,6 +79,8 @@ grid on
 xlabel('X_I (Meters)')
 ylabel('Y_I (Meters)')
 title('Inverted Pendulum Bot Simulation')
+
+pause
 
 for i = 1:num_steps
     % High level controller
@@ -96,6 +97,7 @@ for i = 1:num_steps
     c_pitch = Kp_pitch*pitch_err + Kd_pitch*(pitch_err - last_pitch_err)/dt + pitch_integrator;
     last_pitch_err = pitch_err;
     
+    % Find forward speed and turn speed from wheel 
     v_W_dot = -c_pitch;
     
     % Find pitch
@@ -104,12 +106,12 @@ for i = 1:num_steps
     pitch = pitch + w*dt;
     pitch_hist(i) = 180*pitch/pi;
     
-    % Find wheel position
+    % Find wheel speed/distance
     v_W = v_W + v_W_dot*dt;
     W = W + v_W*dt;
     
     v_W_hist(i) = v_W;
-    w_W_hist(i) = -v_W/wheel_radius - w_dot;
+    w_W_hist(i) = -(v_W/wheel_radius + w_dot)*60/(2*pi);
     
     % Find body position
     B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
@@ -119,8 +121,10 @@ for i = 1:num_steps
     draw_rectangle_rotated(B, bot_depth, bot_height, pitch, body_color)
     plot(B(1), B(2), 'w*')
     rectangle('Position',[W(1) - wheel_radius, 0 , 2*wheel_radius, 2*wheel_radius],...
-    'Curvature',[1,1], 'FaceColor',wheel_color);
+    'Curvature',[1,1], 'FaceColor', wheel_color);
     plot([B(1)-1 B(1)+1], [0, 0], 'k')
+    
+    pause(0.01)
 end
 
 figure(2)
@@ -141,5 +145,5 @@ figure(4)
 plot(t, w_W_hist)
 title('Wheel angular velocity over time')
 xlabel('Time (s)')
-ylabel('Wheel speed (rad/s)')
+ylabel('Wheel speed (RPM)')
 grid on
