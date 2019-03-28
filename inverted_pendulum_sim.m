@@ -8,9 +8,13 @@ close all
 
 % Simulation parameters
 dt = 0.01; % Seconds
-sim_time = 10; % Seconds
-B_desired = 0.5; % Desired position of center of mass, meters
-max_speed = 1; % Bot top speed, m/s
+sim_time = 4; % Seconds
+B_desired = 1; % Desired position of center of mass, meters
+max_speed = 2; % Bot top speed, m/s
+
+make_gif = 1;
+filename = 'inverted_pendulum_side.gif';
+timescale = 0.2;
 
 % Graphing parameters
 body_color = [0.1 0.1 0.8];
@@ -70,8 +74,13 @@ pitch_hist = zeros(1, num_steps);
 v_W_hist = zeros(1, num_steps);
 w_W_hist = zeros(1, num_steps);
 
+% Set up gif capture
+if make_gif == 1
+    frame_time = dt/timescale;
+end
+
 % Set up real time plot
-figure(1)
+f = figure(1);
 axis([-0.25 0.25 -0.25 0.25])
 axis equal
 hold on
@@ -116,6 +125,7 @@ for i = 1:num_steps
     % Find body position
     B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
     
+    % Plot simulation side view
     figure(1)
     cla
     draw_rectangle_rotated(B, bot_depth, bot_height, pitch, body_color)
@@ -123,6 +133,18 @@ for i = 1:num_steps
     rectangle('Position',[W(1) - wheel_radius, 0 , 2*wheel_radius, 2*wheel_radius],...
     'Curvature',[1,1], 'FaceColor', wheel_color);
     plot([B(1)-1 B(1)+1], [0, 0], 'k')
+    
+    % Capture to <filename>
+    if make_gif == 1
+        frame = getframe(f);
+        im = frame2im(frame);
+        [imind, cm] = rgb2ind(im, 256);
+        if i == 1
+            imwrite(imind, cm, filename, 'gif', 'Loopcount', inf);
+        else
+            imwrite(imind, cm, filename, 'gif', 'WriteMode', 'append', 'DelayTime', frame_time);
+        end
+    end
     
     pause(0.01)
 end
