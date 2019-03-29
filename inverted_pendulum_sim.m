@@ -8,13 +8,14 @@ close all
 
 % Simulation parameters
 dt = 0.01; % Seconds
-sim_time = 4; % Seconds
-B_desired = 1; % Desired position of center of mass, meters
-max_speed = 2; % Bot top speed, m/s
+sim_time = 5; % Seconds
+B_desired = 0; % Desired position of center of mass, meters
+max_speed = 1; % Bot top speed, m/s
+timescale = 0.5;
 
-make_gif = 1;
+make_gif = 0;
 filename = 'inverted_pendulum_side.gif';
-timescale = 0.2;
+gif_timescale = 0.2;
 
 % Graphing parameters
 body_color = [0.1 0.1 0.8];
@@ -26,20 +27,19 @@ bot_height = 0.15; % 15 cm, ~6 in
 bot_width = 0.075; % 7.5 cm, ~3 in
 bot_depth = 0.025; % 2.5 cm, ~1 in
 wheel_radius = 0.038; % 1.5 in
-wheel_max_w = 300*2*pi/60; % Rad/s
+wheel_max_w = 100*2*pi/60; % Rad/s
 r = bot_height/2; % Center of wheel to center of mass
 
 % Initialize simulated physical system
 v_r = 0; % Right wheel speed, m/s
 v_l = 0; % Left wheel speed, m/s
-pitch = 0; % Radians
+pitch = pi/4; % Radians
 w = 0; % Rad/s
 w_dot = 0; % Rad/s^2
 yaw = 0;
 w_yaw = 0;
 W = 0; % Distance traveled by wheels, meters
 v_W = 0; % Wheel velocity, m/s
-v_W_max = wheel_max_w*wheel_radius; % m/s
 
 % Constants
 g = -9.80665; % In m/s^2
@@ -76,7 +76,7 @@ w_W_hist = zeros(1, num_steps);
 
 % Set up gif capture
 if make_gif == 1
-    frame_time = dt/timescale;
+    frame_time = dt/gif_timescale;
 end
 
 % Set up real time plot
@@ -106,7 +106,7 @@ for i = 1:num_steps
     c_pitch = Kp_pitch*pitch_err + Kd_pitch*(pitch_err - last_pitch_err)/dt + pitch_integrator;
     last_pitch_err = pitch_err;
     
-    % Find forward speed and turn speed from wheel 
+    % Find wheel speeds
     v_W_dot = -c_pitch;
     
     % Find pitch
@@ -115,12 +115,17 @@ for i = 1:num_steps
     pitch = pitch + w*dt;
     pitch_hist(i) = 180*pitch/pi;
     
-    % Find wheel speed/distance
+    % Find wheel speed
     v_W = v_W + v_W_dot*dt;
+    w_W = -(v_W/wheel_radius + w);
+%     w_W = sign(w_W)*min(5, abs(w_W)); % Cap wheel speed
+%     v_W = -(w_W + w)*wheel_radius;
+    
+    % Find distance
     W = W + v_W*dt;
     
     v_W_hist(i) = v_W;
-    w_W_hist(i) = -(v_W/wheel_radius + w_dot)*60/(2*pi);
+    w_W_hist(i) = w_W*60/(2*pi);
     
     % Find body position
     B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
@@ -146,7 +151,7 @@ for i = 1:num_steps
         end
     end
     
-    pause(0.01)
+    pause(max(dt/timescale-0.01, 0.0001))
 end
 
 figure(2)
