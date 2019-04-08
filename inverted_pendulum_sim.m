@@ -8,8 +8,8 @@ close all
 
 % Simulation parameters
 dt = 0.01; % Seconds
-sim_time = 5; % Seconds
-B_desired = 0; % Desired position of center of mass, meters
+sim_time = 10; % Seconds
+B_desired = 1; % Desired position of center of mass, meters
 max_speed = 1; % Bot top speed, m/s
 timescale = 0.5;
 
@@ -33,7 +33,7 @@ r = bot_height/2; % Center of wheel to center of mass
 % Initialize simulated physical system
 v_r = 0; % Right wheel speed, m/s
 v_l = 0; % Left wheel speed, m/s
-pitch = pi/4; % Radians
+pitch = 0; % Radians
 w = 0; % Rad/s
 w_dot = 0; % Rad/s^2
 yaw = 0;
@@ -46,17 +46,12 @@ g = -9.80665; % In m/s^2
 
 % Position controller (modified PD)
 K_pos = 0.2;
-Kp_pos = 1.5*K_pos;
-Kd_pos = 1*K_pos;
+Kp_pos = 1.8*K_pos;
+Kd_pos = 1.2*K_pos;
 
-% Run high level controller for the first step
+last_B_desired = B_desired;
 B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
-pos_err = B(1) - B_desired;
-pos_err_p = sign(pos_err)*min(abs(pos_err), max_speed*Kd_pos/Kp_pos);
-c_pos = Kp_pos*pos_err_p;
-last_pos_err = pos_err;
-
-pitch_desired = c_pos;
+last_pos_err = B(1) - B_desired;
 
 % Pitcch controller (standard PID)
 K_pitch = 25;
@@ -64,7 +59,9 @@ Kp_pitch = 1*K_pitch;
 Ki_pitch = 0.02*K_pitch;
 Kd_pitch = 0.05*K_pitch;
 
-last_pitch_err = pitch - pitch_desired;
+pitch_desired = 0;
+last_pitch_desired = pitch_desired;
+last_pitch_err = 0;
 pitch_integrator = 0;
 
 % History for graphing
@@ -93,7 +90,10 @@ pause
 
 for i = 1:num_steps
     % High level controller
+    delta_B_desired = B_desired - last_B_desired;
+    last_pos_err = last_pos_err - delta_B_desired;
     pos_err = B(1) - B_desired;
+    last_B_desired = B_desired;
     pos_err_p = sign(pos_err)*min(abs(pos_err), max_speed*Kd_pos/Kp_pos);
     c_pos = Kp_pos*pos_err_p + Kd_pos*(pos_err - last_pos_err)/dt;
     last_pos_err = pos_err;
@@ -101,7 +101,10 @@ for i = 1:num_steps
     pitch_desired = c_pos;
     
     % Low level controller
+    delta_pitch_desired = pitch_desired - last_pitch_desired;
+    last_pitch_err = last_pitch_err - delta_pitch_desired;
     pitch_err = pitch - pitch_desired;
+    last_pitch_desired = pitch_desired;
     pitch_integrator = pitch_integrator + Ki_pitch*pitch_err*dt;
     c_pitch = Kp_pitch*pitch_err + Kd_pitch*(pitch_err - last_pitch_err)/dt + pitch_integrator;
     last_pitch_err = pitch_err;
@@ -152,6 +155,10 @@ for i = 1:num_steps
     end
     
     pause(max(dt/timescale-0.01, 0.0001))
+    
+    if mod(i, 200) == 0,
+        B_desired = B_desired*-1
+    end
 end
 
 figure(2)

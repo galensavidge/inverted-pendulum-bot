@@ -20,6 +20,7 @@
 // Bot characteristics
 #define WHEEL_RADIUS 0.035 // 3.5cm
 #define R 0.07 // Wheel center of rotation to bot center of mass, about 7cm
+#define BALANCED_PITCH 0 // Degrees
 
 // Pins
 #define LEFT_SERVO_PIN 9
@@ -28,7 +29,7 @@
 // Servo characteristics
 #define SERVO_ZERO_PULSE 1500
 #define SERVO_MAX_PULSE 100 // Servo pulse range is SERVO_ZERO_PULSE +/- this value
-#define SERVO_MAX_SPEED M_PI // rad/s
+#define SERVO_MAX_SPEED 18.85 // rad/s
 
 // Position controller
 #define K_POS 0.2
@@ -41,17 +42,16 @@
 #define KI_PITCH (0.02*K_PITCH)
 #define KD_PITCH (0.05*K_PITCH)
 
-#define INITIAL_ERROR 10 // Anything about 2pi should work fine
-
-#define DEG2RAD(x) (x*M_PI/180.0)
-
 // ----- GLOBAL VARIABLES -----
 Adafruit_BNO055 bno = Adafruit_BNO055();
 Servo left_servo, right_servo;
 
 float com_position = 0; // Meters, linear position of center of mass
-float com_position_desired = 1;
-float last_pos_err = com_position_desired;
+float pos_desired = 1;
+float last_pos_desired = pos_desired;
+float last_pos_err = com_position - pos_desired;
+
+float last_pitch_desired = 0;
 float last_pitch_err = 0;
 float pitch_integrator = 0;
 
@@ -60,6 +60,17 @@ float v_W = 0; // Desired speed of the point in the middle of the wheel axis of 
 uint32_t last_time_us;
 
 // ----- HELPER FUNCTIONS -----
+float deg2rad(float x) {
+  float r = x*M_PI/180.0;
+  if(r >= 2*M_PI) {
+    r -= 2*M_PI;
+  }
+  else if(r < 0) {
+    r += 2*M_PI;
+  }
+  return r;
+}
+
 void init_IMU() {
   /* Initialise the sensor */
   if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF))
@@ -100,13 +111,13 @@ void init_IMU() {
 // Speeds are in rad/s
 void setWheelSpeeds(float left, float right) {
   // Cap wheel speeds
-  if (left > WHEEL_MAX_SPEED) left = WHEEL_MAX_SPEED;
-  else if (left < -WHEEL_MAX_SPEED) left = -WHEEL_MAX_SPEED;
-  if (right > WHEEL_MAX_SPEED) right = WHEEL_MAX_SPEED;
-  else if (right < -WHEEL_MAX_SPEED) right = -WHEEL_MAX_SPEED;
+  if (left > SERVO_MAX_SPEED) left = SERVO_MAX_SPEED;
+  else if (left < -SERVO_MAX_SPEED) left = -SERVO_MAX_SPEED;
+  if (right > SERVO_MAX_SPEED) right = SERVO_MAX_SPEED;
+  else if (right < -SERVO_MAX_SPEED) right = -SERVO_MAX_SPEED;
 
-  left_wheel.writeMicroseconds(wheelSpeedToPulse(left);
-  right_wheel.writeMicroseconds(wheelSpeedToPulse(right);
+  left_servo.writeMicroseconds(wheelSpeedToPulse(left));
+  right_servo.writeMicroseconds(wheelSpeedToPulse(right));
 }
 
 // Speed is in rad/s
@@ -136,13 +147,14 @@ void setup() {
 }
 
 void loop() {
+  // SENSING
   // Read orientation and angular rate
   sensors_event_t event; 
   bno.getEvent(&event);
-  float pitch = DEG2RAD(event.orientation.z);
-  float yaw = DEG2RAD(event.orientation.x);
-  float pitch_dot = DEG2RAD(event.gyro.z);
-  float yaw_dot = DEG2RAD(event.gyro.x);
+  float pitch = deg2rad(event.orientation.z - BALANCED_PITCH);
+  float yaw = deg2rad(event.orientation.x);
+  float pitch_dot = deg2rad(event.gyro.z);
+  float yaw_dot = deg2rad(event.gyro.x);
   
   Serial.print("Yaw: ");
   Serial.print(yaw, 4);
@@ -153,21 +165,38 @@ void loop() {
   uint32_t new_time_us = micros();
   float dt = (new_time_us - last_time_us)/1000000.0; // Convert to seconds
   
-  // Position controller
-  float pos_err = com_position - com_position_desired;
+  // POSITION CONTROLLER
+  // Stop changes in deisred position from breaking the controller
+  float delta_pos_desired = pos_desired - last_pos_desired;
+  last_pos_desired = pos_desired;
+  last_pos_err = last_pos_err - delta_pos_desired;
+
+  // Run PD controller
+  float pos_err = com_position - pos_desired; // Find error
   float pos_err_p = sign(pos_err)*min(abs(pos_err), MAX_SPEED*KD_POS/KP_POS);
   float c_pos = KP_POS*pos_err_p + KD_POS*(pos_err - last_pos_err)/dt;
+  
   last_pos_err = pos_err;
   float pitch_desired = c_pos;
 
-  // Pitch controller
-  float pitch_err = pitch - pitch_desired;
+  // PITCH CONTROLLER
+  // Stop changes in deisred pitch from breaking the controller
+  float delta_pitch_desired = pitch_desired - last_pitch_desired;
+  last_pitch_desired = pitch_desired;
+  last_pitch_err = last_pitch_err - delta_pitch_desired;
+
+  // Run PID controller
+  float pitch_err = pitch - pitch_desired; // Find error
   pitch_integrator = pitch_integrator + KI_PITCH*pitch_err*dt;
   float c_pitch = KP_PITCH*pitch_err + KD_PITCH*(pitch_err - last_pitch_err)/dt + pitch_integrator;
+  
   last_pitch_err = pitch_err;
 
-  // Set wheel speeds
+  // SET MOTOR SPEEDS
   float v_W_dot = -c_pitch;
   float v_W = v_W + v_W_dot*dt;
   float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
+  float left_speed = w_W;
+  float right_speed = w_W;
+  setWheelSpeeds(left_speed, right_speed);
 }
