@@ -24,7 +24,7 @@ void setup() {
 }
 
 void loop() {
-//  for (; pulse_time < 1625; pulse_time += 1) {
+//  for (; pulse_time < 1600; pulse_time += 1) {
 //    // in steps of 1 degree
 //    myservo.writeMicroseconds(pulse_time);
 //    delay(10);
@@ -34,4 +34,8 @@ void loop() {
 //    myservo.writeMicroseconds(pulse_time);
 //    delay(10);
 //  }
+    myservo.writeMicroseconds(1600);
+    delay(500);
+    myservo.writeMicroseconds(1400);
+    delay(500);
 }

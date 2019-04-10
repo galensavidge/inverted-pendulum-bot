@@ -25,6 +25,7 @@
 // Pins
 #define LEFT_SERVO_PIN 9
 #define RIGHT_SERVO_PIN 10
+#define BATTERY_PIN A0
 
 // Servo characteristics
 #define SERVO_ZERO_PULSE 1500
@@ -41,6 +42,13 @@
 #define KP_PITCH (1*K_PITCH)
 #define KI_PITCH (0.02*K_PITCH)
 #define KD_PITCH (0.05*K_PITCH)
+
+// Battery voltage sensing
+#define ADC_RESOLUTION_BITS 10
+#define ADC_REFERENCE_VOLTAGE 1.1
+#define BATT_SCALAR 11
+#define DIODE_DROP 0.22
+#define MIN_BATT_VOLTAGE 3.8
 
 // ----- GLOBAL VARIABLES -----
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -69,6 +77,10 @@ float deg2rad(float x) {
     r += 2*M_PI;
   }
   return r;
+}
+
+float getBattVoltage(int adc_reading) {
+  return (float)BATT_SCALAR*adc_reading*ADC_REFERENCE_VOLTAGE/(1<<ADC_RESOLUTION_BITS) + DIODE_DROP;
 }
 
 void init_IMU() {
@@ -117,7 +129,7 @@ void setWheelSpeeds(float left, float right) {
   else if (right < -SERVO_MAX_SPEED) right = -SERVO_MAX_SPEED;
 
   left_servo.writeMicroseconds(wheelSpeedToPulse(left));
-  right_servo.writeMicroseconds(wheelSpeedToPulse(right));
+  right_servo.writeMicroseconds(-wheelSpeedToPulse(right));
 }
 
 // Speed is in rad/s
@@ -142,11 +154,24 @@ void setup() {
   left_servo.attach(LEFT_SERVO_PIN);
   right_servo.attach(RIGHT_SERVO_PIN);
 
+  analogReference(INTERNAL);
+  
   last_time_us = micros();
   delay(1);
 }
 
 void loop() {
+  // Check battery voltage
+  float batt_voltage = getBattVoltage(analogRead(BATTERY_PIN));
+  Serial.print("Battery voltage: ");
+  Serial.println(batt_voltage);
+  
+  if(batt_voltage < MIN_BATT_VOLTAGE) {
+    Serial.println("Battery low, shutting down...");
+    setWheelSpeeds(0, 0);
+    while(1);
+  }
+  
   // SENSING
   // Read orientation and angular rate
   sensors_event_t event; 
@@ -156,10 +181,10 @@ void loop() {
   float pitch_dot = deg2rad(event.gyro.z);
   float yaw_dot = deg2rad(event.gyro.x);
   
-  Serial.print("Yaw: ");
-  Serial.print(yaw, 4);
-  Serial.print("Pitch: ");
-  Serial.print(pitch, 4);
+//  Serial.print("Yaw: ");
+//  Serial.print(event.orientation.x, 4);
+//  Serial.print("Pitch: ");
+//  Serial.print(event.orientation.z, 4);
   
   // Measure time
   uint32_t new_time_us = micros();
