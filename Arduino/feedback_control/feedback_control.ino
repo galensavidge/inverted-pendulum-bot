@@ -20,11 +20,11 @@
 // Bot characteristics
 #define WHEEL_RADIUS 0.035 // 3.5cm
 #define R 0.07 // Wheel center of rotation to bot center of mass, about 7cm
-#define BALANCED_PITCH 0 // Degrees
+#define BALANCED_PITCH 84 // Degrees
 
 // Pins
-#define LEFT_SERVO_PIN 9
-#define RIGHT_SERVO_PIN 10
+#define LEFT_SERVO_PIN 10
+#define RIGHT_SERVO_PIN 9
 #define BATTERY_PIN A0
 
 // Servo characteristics
@@ -38,10 +38,10 @@
 #define KD_POS (1*K_POS)
 
 // Pitch controller
-#define K_PITCH 25
+#define K_PITCH 100 //25
 #define KP_PITCH (1*K_PITCH)
-#define KI_PITCH (0.02*K_PITCH)
-#define KD_PITCH (0.05*K_PITCH)
+#define KI_PITCH 0 //(0.02*K_PITCH)
+#define KD_PITCH (0.01*K_PITCH)
 
 // Battery voltage sensing
 #define ADC_RESOLUTION_BITS 10
@@ -49,6 +49,8 @@
 #define BATT_SCALAR 11
 #define DIODE_DROP 0.22
 #define MIN_BATT_VOLTAGE 3.8
+
+#define V_W_HIST_LENGTH 10
 
 // ----- GLOBAL VARIABLES -----
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -70,12 +72,6 @@ uint32_t last_time_us;
 // ----- HELPER FUNCTIONS -----
 float deg2rad(float x) {
   float r = x*M_PI/180.0;
-  if(r >= 2*M_PI) {
-    r -= 2*M_PI;
-  }
-  else if(r < 0) {
-    r += 2*M_PI;
-  }
   return r;
 }
 
@@ -128,13 +124,13 @@ void setWheelSpeeds(float left, float right) {
   if (right > SERVO_MAX_SPEED) right = SERVO_MAX_SPEED;
   else if (right < -SERVO_MAX_SPEED) right = -SERVO_MAX_SPEED;
 
-  left_servo.writeMicroseconds(wheelSpeedToPulse(left));
-  right_servo.writeMicroseconds(-wheelSpeedToPulse(right));
+  left_servo.writeMicroseconds(wheelSpeedToPulse(-left));
+  right_servo.writeMicroseconds(wheelSpeedToPulse(right));
 }
 
 // Speed is in rad/s
 int wheelSpeedToPulse(float speed) {
-  return SERVO_ZERO_PULSE + speed*SERVO_MAX_PULSE/SERVO_MAX_SPEED;
+  return SERVO_ZERO_PULSE + (int)speed*SERVO_MAX_PULSE/SERVO_MAX_SPEED;
 }
 
 // Returns the sign of x or 0 if x == 0
@@ -155,6 +151,8 @@ void setup() {
   right_servo.attach(RIGHT_SERVO_PIN);
 
   analogReference(INTERNAL);
+
+  // imu_filter = newMovingAvgFilter(1, 10);
   
   last_time_us = micros();
   delay(1);
@@ -163,9 +161,6 @@ void setup() {
 void loop() {
   // Check battery voltage
   float batt_voltage = getBattVoltage(analogRead(BATTERY_PIN));
-  Serial.print("Battery voltage: ");
-  Serial.println(batt_voltage);
-  
   if(batt_voltage < MIN_BATT_VOLTAGE) {
     Serial.println("Battery low, shutting down...");
     setWheelSpeeds(0, 0);
@@ -177,9 +172,12 @@ void loop() {
   sensors_event_t event; 
   bno.getEvent(&event);
   float pitch = deg2rad(event.orientation.z - BALANCED_PITCH);
+  if(pitch > M_PI) pitch -= M_PI;
   float yaw = deg2rad(event.orientation.x);
   float pitch_dot = deg2rad(event.gyro.z);
   float yaw_dot = deg2rad(event.gyro.x);
+
+  // Moving average pitch
   
 //  Serial.print("Yaw: ");
 //  Serial.print(event.orientation.x, 4);
@@ -188,7 +186,7 @@ void loop() {
   
   // Measure time
   uint32_t new_time_us = micros();
-  float dt = (new_time_us - last_time_us)/1000000.0; // Convert to seconds
+  float dt = ((unsigned)(new_time_us - last_time_us))/1000000.0; // Convert to seconds
   
   // POSITION CONTROLLER
   // Stop changes in deisred position from breaking the controller
@@ -202,7 +200,8 @@ void loop() {
   float c_pos = KP_POS*pos_err_p + KD_POS*(pos_err - last_pos_err)/dt;
   
   last_pos_err = pos_err;
-  float pitch_desired = c_pos;
+  //float pitch_desired = c_pos;
+  float pitch_desired = 0;
 
   // PITCH CONTROLLER
   // Stop changes in deisred pitch from breaking the controller
@@ -218,10 +217,15 @@ void loop() {
   last_pitch_err = pitch_err;
 
   // SET MOTOR SPEEDS
-  float v_W_dot = -c_pitch;
-  float v_W = v_W + v_W_dot*dt;
-  float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
+  //float v_W_dot = -c_pitch;
+  //float v_W = v_W + v_W_dot*dt;
+  // float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
+  float w_W = c_pitch;
+  Serial.println(w_W);
   float left_speed = w_W;
   float right_speed = w_W;
+  
   setWheelSpeeds(left_speed, right_speed);
+
+  delay(5);
 }
