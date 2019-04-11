@@ -41,7 +41,7 @@
 #define K_PITCH 100 //25
 #define KP_PITCH (1*K_PITCH)
 #define KI_PITCH 0 //(0.02*K_PITCH)
-#define KD_PITCH (0.01*K_PITCH)
+#define KD_PITCH (0.0.1*K_PITCH)
 
 // Battery voltage sensing
 #define ADC_RESOLUTION_BITS 10
