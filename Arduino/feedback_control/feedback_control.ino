@@ -20,7 +20,7 @@
 // Bot characteristics
 #define WHEEL_RADIUS 0.035 // 3.5cm
 #define R 0.07 // Wheel center of rotation to bot center of mass, about 7cm
-#define BALANCED_PITCH 84 // Degrees
+#define BALANCED_PITCH 88 // Degrees
 
 // Pins
 #define LEFT_SERVO_PIN 10
@@ -38,10 +38,10 @@
 #define KD_POS (1*K_POS)
 
 // Pitch controller
-#define K_PITCH 100 //25
-#define KP_PITCH (1*K_PITCH)
+#define K_PITCH 150 //25
+#define KP_PITCH (2*K_PITCH)
 #define KI_PITCH 0 //(0.02*K_PITCH)
-#define KD_PITCH (0.0.1*K_PITCH)
+#define KD_PITCH (0.1*K_PITCH)
 
 // Battery voltage sensing
 #define ADC_RESOLUTION_BITS 10
@@ -187,6 +187,7 @@ void loop() {
   // Measure time
   uint32_t new_time_us = micros();
   float dt = ((unsigned)(new_time_us - last_time_us))/1000000.0; // Convert to seconds
+  last_time_us = new_time_us;
   
   // POSITION CONTROLLER
   // Stop changes in deisred position from breaking the controller
@@ -200,8 +201,9 @@ void loop() {
   float c_pos = KP_POS*pos_err_p + KD_POS*(pos_err - last_pos_err)/dt;
   
   last_pos_err = pos_err;
-  //float pitch_desired = c_pos;
-  float pitch_desired = 0;
+  float pitch_desired = c_pos;
+  //Serial.println(c_pos);
+  //float pitch_desired = 0;
 
   // PITCH CONTROLLER
   // Stop changes in deisred pitch from breaking the controller
@@ -217,11 +219,10 @@ void loop() {
   last_pitch_err = pitch_err;
 
   // SET MOTOR SPEEDS
-  //float v_W_dot = -c_pitch;
-  //float v_W = v_W + v_W_dot*dt;
-  // float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
-  float w_W = c_pitch;
-  Serial.println(w_W);
+  float v_W_dot = -c_pitch;
+  float v_W = v_W + v_W_dot*dt;
+  float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
+  //float w_W = c_pitch;
   float left_speed = w_W;
   float right_speed = w_W;
   
