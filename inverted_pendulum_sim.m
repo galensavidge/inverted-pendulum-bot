@@ -53,7 +53,7 @@ last_B_desired = B_desired;
 B = [W - r*sin(pitch); wheel_radius + r*cos(pitch)];
 last_pos_err = B(1) - B_desired;
 
-% Pitcch controller (standard PID)
+% Pitch controller (standard PID)
 K_pitch = 25;
 Kp_pitch = 1*K_pitch;
 Ki_pitch = 0.02*K_pitch;

@@ -19,8 +19,9 @@
 
 // Bot characteristics
 #define WHEEL_RADIUS 0.035 // 3.5cm
-#define R 0.07 // Wheel center of rotation to bot center of mass, about 7cm
-#define BALANCED_PITCH 88 // Degrees
+#define R 0.05 // Wheel center of rotation to bot center of mass, about 5cm
+#define BALANCED_PITCH 87 // Degrees
+#define V_W_MAX (R*SERVO_MAX_SPEED) // m/s
 
 // Pins
 #define LEFT_SERVO_PIN 10
@@ -35,20 +36,20 @@
 // Position controller
 #define K_POS 0.2
 #define KP_POS (1.5*K_POS)
-#define KD_POS (1*K_POS)
+#define KD_POS (1.2*K_POS)
 
 // Pitch controller
-#define K_PITCH 150 //25
-#define KP_PITCH (2*K_PITCH)
-#define KI_PITCH 0 //(0.02*K_PITCH)
-#define KD_PITCH (0.1*K_PITCH)
+#define K_PITCH 30 //25
+#define KP_PITCH (1*K_PITCH)
+#define KI_PITCH 0 //(0.03*K_PITCH)
+#define KD_PITCH (0.02*K_PITCH)
 
 // Battery voltage sensing
 #define ADC_RESOLUTION_BITS 10
-#define ADC_REFERENCE_VOLTAGE 1.1
-#define BATT_SCALAR 11
-#define DIODE_DROP 0.22
-#define MIN_BATT_VOLTAGE 3.8
+#define ADC_REFERENCE_VOLTAGE 1.12
+#define BATT_SCALAR 11 // From voltage divider
+#define DIODE_DROP 0.32
+#define MIN_BATT_VOLTAGE 7.4 // 2S LiPo storage voltage
 
 #define V_W_HIST_LENGTH 10
 
@@ -56,17 +57,22 @@
 Adafruit_BNO055 bno = Adafruit_BNO055();
 Servo left_servo, right_servo;
 
-float com_position = 0; // Meters, linear position of center of mass
+// Robot physical characteristics
+float com_position = 0; // Meters, linear position of the center of mass 
+float W_position = 0; // Meters, linear position of W, the point between the wheels
+float v_W = 0; // Speed of the point in the middle of the wheel axis of rotation
+
+// Position controller settings
 float pos_desired = 1;
 float last_pos_desired = pos_desired;
 float last_pos_err = com_position - pos_desired;
 
+// Pitch controller settings
 float last_pitch_desired = 0;
 float last_pitch_err = 0;
 float pitch_integrator = 0;
 
-float v_W = 0; // Desired speed of the point in the middle of the wheel axis of rotation
-
+uint8_t first_step = 1;
 uint32_t last_time_us;
 
 // ----- HELPER FUNCTIONS -----
@@ -124,8 +130,8 @@ void setWheelSpeeds(float left, float right) {
   if (right > SERVO_MAX_SPEED) right = SERVO_MAX_SPEED;
   else if (right < -SERVO_MAX_SPEED) right = -SERVO_MAX_SPEED;
 
-  left_servo.writeMicroseconds(wheelSpeedToPulse(-left));
-  right_servo.writeMicroseconds(wheelSpeedToPulse(right));
+  left_servo.write(wheelSpeedToPulse(-left));
+  right_servo.write(wheelSpeedToPulse(right));
 }
 
 // Speed is in rad/s
@@ -146,16 +152,27 @@ void setup() {
   Serial.println("");
   
   init_IMU();
+  // imu_filter = newMovingAvgFilter(1, 10);
 
+  // Set up servos
   left_servo.attach(LEFT_SERVO_PIN);
   right_servo.attach(RIGHT_SERVO_PIN);
+  setWheelSpeeds(0, 0);
 
+  // Initialize battery ADC pin
   analogReference(INTERNAL);
+  analogRead(BATTERY_PIN);
+  delay(10);
 
-  // imu_filter = newMovingAvgFilter(1, 10);
+  // Read battery voltage
+  float batt_voltage = getBattVoltage(analogRead(BATTERY_PIN));
+  Serial.print("Battery voltage: ");
+  Serial.print(batt_voltage);
+  Serial.println("V");
   
+  // Find initial time
   last_time_us = micros();
-  delay(1);
+  delay(5);
 }
 
 void loop() {
@@ -164,6 +181,8 @@ void loop() {
   if(batt_voltage < MIN_BATT_VOLTAGE) {
     Serial.println("Battery low, shutting down...");
     setWheelSpeeds(0, 0);
+    left_servo.detach();
+    right_servo.detach();
     while(1);
   }
   
@@ -176,8 +195,6 @@ void loop() {
   float yaw = deg2rad(event.orientation.x);
   float pitch_dot = deg2rad(event.gyro.z);
   float yaw_dot = deg2rad(event.gyro.x);
-
-  // Moving average pitch
   
 //  Serial.print("Yaw: ");
 //  Serial.print(event.orientation.x, 4);
@@ -201,9 +218,9 @@ void loop() {
   float c_pos = KP_POS*pos_err_p + KD_POS*(pos_err - last_pos_err)/dt;
   
   last_pos_err = pos_err;
-  float pitch_desired = c_pos;
+  //float pitch_desired = c_pos;
   //Serial.println(c_pos);
-  //float pitch_desired = 0;
+  float pitch_desired = 0;
 
   // PITCH CONTROLLER
   // Stop changes in deisred pitch from breaking the controller
@@ -215,14 +232,25 @@ void loop() {
   float pitch_err = pitch - pitch_desired; // Find error
   pitch_integrator = pitch_integrator + KI_PITCH*pitch_err*dt;
   float c_pitch = KP_PITCH*pitch_err + KD_PITCH*(pitch_err - last_pitch_err)/dt + pitch_integrator;
+  Serial.println(pitch);
   
   last_pitch_err = pitch_err;
 
+  // BOT KINEMATICS
+  float v_W_dot = -c_pitch; // Controller outputs an acceleration
+  v_W = v_W + v_W_dot*dt;
+  if(v_W > V_W_MAX) {
+    v_W = V_W_MAX;
+  }
+  else if(v_W < -V_W_MAX) {
+    v_W = -V_W_MAX;
+  }
+  
+  W_position = W_position + v_W*dt;
+  com_position = W_position + R*sin(pitch);
+  
   // SET MOTOR SPEEDS
-  float v_W_dot = -c_pitch;
-  float v_W = v_W + v_W_dot*dt;
   float w_W = -(v_W/WHEEL_RADIUS + pitch_dot);
-  //float w_W = c_pitch;
   float left_speed = w_W;
   float right_speed = w_W;
   
